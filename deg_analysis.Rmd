@@ -1,0 +1,146 @@
+---
+title: "deg_analysis"
+output: pdf_document
+---
+
+```{r setup, include=TRUE, echo= FALSE}
+knitr::opts_chunk$set(echo = TRUE, warning = FALSE, message = FALSE)
+library(limma)
+library(edgeR)
+library(dplyr)
+library(tidyverse)
+library(ggforce)
+library(ggfortify)
+library(viridis)
+library(magrittr)
+library(ggnewscale)
+```
+
+
+
+```{r, echo=FALSE}
+source_rmd = function(file, ...) {
+  tmp_file = tempfile(fileext=".R")
+  on.exit(unlink(tmp_file), add = TRUE)
+  knitr::purl(file, output=tmp_file)
+  source(file = tmp_file, ...)
+}
+```
+
+```{r, echo=FALSE}
+options(knitr.duplicate.label = "allow")
+source_rmd("rawdata_normalization.rmd")
+```
+
+
+```{r}
+cpm <- cpm(dge_object2)
+lcpm <- cpm(dge_object2, log = TRUE, prior.count =1)
+```
+
+Making a MDS plot to visualize possible batch effects
+
+```{r}
+col.group <- group
+levels(col.group) <- rainbow(12)
+col.group <- as.character(col.group)
+plotMDS(lcpm, labels = group, col = col.group)
+
+col.cell <- factor(sample.info$Sample_Group)
+levels(col.cell) <- rainbow(4)
+col.cell <- as.character(col.cell)
+plotMDS(lcpm,
+        labels = factor(sample.info$Sample_Group),
+        col = col.cell)
+
+
+col.treatment <- factor(sample.info$Treatment)
+levels(col.treatment) <- rainbow(3)
+col.treatment <- as.character(col.treatment)
+plotMDS(lcpm,
+        labels = factor(sample.info$Treatment),
+        col = col.treatment)
+
+
+```
+
+Linear modeling of the data
+
+```{r}
+fit12 <- lmFit(lcpm, mm)
+
+# v2 <- voom(dge_object2, mm, plot = TRUE)
+# fit1 <- lmFit(v2, mm)
+```
+
+```{r}
+contr.matrix2 <- makeContrasts(
+   # Within cell mtb vs untreated
+   AM.MtbAUXvsAM.Untreated = AM.MtbAUX - AM.Untreated,
+   iMACs.MtbAUXvsiMACs.Untreated = iMACs.MtbAUX - iMACs.Untreated,
+   MDM.MtbAUXvsMDM.Untreated = MDM.MtbAUX - MDM.Untreated,
+   THP1.MtbAUXvsTHP1.Untreated = THP1.MtbAUX - THP1.Untreated,
+   # Within cell LPS vs untreated
+   AM.LPSvsAM.Untreated = AM.LPS - AM.Untreated,
+   iMACs.LPSvsiMACs.Untreated = iMACs.LPS - iMACs.Untreated,
+   MDM.LPSvsMDM.Untreated = MDM.LPS - MDM.Untreated,
+   THP1.LPSvsTHP1.Untreated = THP1.LPS - THP1.Untreated,
+   
+   #between cell MTB
+   # iMACs.MtbAUXvsAM.MtbAUX = iMACs.MtbAUX - AM.MtbAUX,
+   # MDM.MtbAUXvsAM.MtbAUX = MDM.MtbAUX - AM.MtbAUX,
+   # THP1.MtbAUXvsAM.MtbAUX = THP1.MtbAUX - AM.MtbAUX,
+
+   levels = colnames(mm)
+)
+
+contr.matrix2
+
+```
+
+```{r}
+# tmp1 <- contrasts.fit(fit1, contr.matrix2)
+tmp12 <- contrasts.fit(fit12, contr.matrix2)
+
+# efit1 <- eBayes(tmp1)
+efit12 <- eBayes(tmp12, trend = TRUE)
+
+#topTable(efit12, coef = ncol(mm))
+
+summary(decideTests(efit1))
+#summary(decideTests(efit12))
+
+
+topTreat(efit12, coef = 1)
+```
+
+
+
+```{r}
+# Function to create data frames with all results using the contrast matrix for naming
+result_dfs <- function(con_mat) {
+   contrast_names <- colnames(con_mat)
+   results_list <- list()
+   for (i in seq(from = 1, to = length(contrast_names))) {
+      name <- print(contrast_names[i], quote = FALSE)
+      
+      top <- topTreat(efit12, coef = i, n = Inf)
+      top <- gene.info %>% inner_join(rownames_to_column(top, "Gene_ID"), by ="Gene_ID") 
+      top <- data.frame(top)
+      results_list[[contrast_names[i]]] <- assign(name, top)
+      rownames(results_list[[contrast_names[i]]])<- top$Gene_ID
+   }
+   results_list
+}
+
+results<- result_dfs(contr.matrix2)
+
+
+
+saveRDS(results, file = "results_list.RData")
+
+      
+```
+
+
+

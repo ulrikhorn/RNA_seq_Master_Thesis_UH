@@ -1,0 +1,296 @@
+---
+title: "Gutierrez"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+
+#setwd("C:/Users/ulrikho/OneDrive - NTNU/Master_Thesis_RNAseq")
+library(limma)
+#(Glimm_guta)
+library(edgeR)
+library(dplyr)
+library(tidyverse)
+library(ggforce)
+library(ggfortify)
+library(viridis)
+library(magrittr)
+library(ggnewscale)
+```
+
+
+Converting the metadata into csv to be read into R
+
+https://www.ncbi.nlm.nih.gov/pmc/articles/PMC7710011/
+
+
+Reading metadata file into R
+
+```{r}
+
+sample.info.gut <- read.csv("Data/index_merged_counts_corrected.csv")
+
+
+sample.info.gut
+```
+Reading in the count data without row names. This way gives the "some values in assay are not integers" error
+
+Only one of these functions should be used at a time.
+
+```{r}
+
+rawdata_gut <- read.csv("Data/merged_counts.txt", sep = "\t", header = TRUE)
+
+
+colnames(rawdata_gut)[2:19] <- sample.info.gut$Sample_ID
+
+colnames(rawdata_gut)[1] <- "Gene_ID"
+
+```
+
+
+
+
+
+```{r}
+
+# Reading in Gene info
+gene.info <- read_tsv("Data/gene_info.tsv")
+
+#Changing first column to Gene ID for joining
+colnames(gene.info)[1] <- "Gene_ID"
+
+
+rawdata_gut <- semi_join(rawdata_gut, gene.info, by = "Gene_ID")
+
+genes <- semi_join(gene.info, rawdata_gut, by = "Gene_ID")
+  
+
+
+
+#making rawdata matrix
+rownames(rawdata_gut) <- rawdata_gut[, 1]
+rawdata_gut <- rawdata_gut %>% dplyr::select(-Gene_ID)
+rawdata_gut <- as.matrix(rawdata_gut)
+
+dim(rawdata_gut)
+```
+
+
+```{r}
+sample.info.gut
+```
+
+
+
+DGE Object
+```{r}
+# Defining group_gut for DGE object
+group_gut <- sample.info.gut$Condition
+
+# Creating dge object which will contain read counts, sample info and gene info
+dge_object_gut <- DGEList(rawdata_gut, group = group_gut)
+unnormalized_dge_object <- dge_object_gut
+
+#adding treatment to dge$samples
+Treatment <- factor(sample.info.gut$Treatment)
+dge_object_gut$samples$Treatment <- Treatment
+
+#adding cell type
+Time <- factor(sample.info.gut$Time)
+dge_object_gut$samples$Time <- Time
+
+# Removing duplicate gene entries
+genes <- genes[!duplicated(genes$Gene_ID), ]
+# Adding gene info to dge object
+dge_object_gut$genes <- genes
+
+# For later use
+samplenames <- colnames(rawdata_gut)
+
+nrow(dge_object_gut$genes)
+
+
+dge_object_gut$samples
+```
+intercept or not
+https://bioconductor.org/packages/release/workflows/vignettes/RNAseq123/inst/doc/designmatrices.html#design-matrices-with-and-without-intercept-term
+
+```{r}
+mm_gut <- model.matrix(~0 + group_gut)
+#mm_gut <- model.matrix(~0 + group_gut)
+colnames(mm_gut) <- gsub("group_gut", "", colnames(mm_gut))
+
+
+```
+
+
+
+
+```{r}
+keep.exprs <- filterByExpr(dge_object_gut, mm_gut)
+
+dge_object_gut <- dge_object_gut[keep.exprs,, keep.lib.sizes=FALSE]
+dim(dge_object_gut)
+
+```
+
+
+```{r}
+unormalized_dge <- dge_object_gut
+
+dge_object_gut <- calcNormFactors(dge_object_gut, method = "TMM")
+
+
+
+norm_exp_matrix_gut <- cpm(dge_object_gut, log = TRUE, prior.count = 1)
+
+
+as.data.frame(norm_exp_matrix_gut) %>% rownames_to_column("Gene_ID") %>% filter(Gene_ID == "ENSG00000111537")
+```
+
+```{r}
+# col <- c("#A6CEE3", "#1F78B4", "#B2DF8A", "#33A02C", "#FB9A99", "#E31A1C", "#FDBF6F", "#FF7F00", "#CAB2D6", "#6A3D9A", "#FFFF99", "#B15928", "azure", "bisque1", "blue1", "brown2", "burlywood4", "chartreuse1")
+# 
+# samples <- paste("Sample", 1:18)
+# samples
+# par(mfrow = c(1, 2))
+# lcpm_gut <- cpm(unormalized_dge, log = TRUE)
+# boxplot(lcpm_gut,
+#         las = 2,
+#         col = col,
+#         main = "")
+# title(main = "A. Unnormalised data", ylab = "Log-cpm")
+# 
+# 
+# lcpm_gut <- cpm(dge_object_gut, log = TRUE)
+# boxplot(lcpm_gut,
+#         las = 2,
+#         col = col,
+#         main = "")
+# title(main = "B. Normalised data", ylab = "Log-cpm")
+# 
+# 
+# 
+
+
+
+```
+
+
+```{r}
+cpm <- cpm(dge_object_gut)
+lcpm_gut <- cpm(dge_object_gut, log = TRUE, prior.count = 3)
+```
+
+
+
+
+```{r}
+# col.group <- group_gut
+# col.group <- as.factor(col.group_gut)
+# levels(col.group_gut) <- rainbow(18)
+# col.group_gut <- as.character(col.group_gut)
+# plotMDS(lcpm_gut, labels = group_gut, col = col.group_gut)
+# 
+# col.cell <- factor(sample.info.gut$Time)
+# levels(col.cell) <- rainbow(2)
+# col.cell <- as.character(col.cell)
+# plotMDS(lcpm_gut,
+#         labels = factor(sample.info.gut$Time),
+#         col = col.cell)
+# 
+# 
+# col.treatment <- factor(sample.info.gut$Treatment)
+# levels(col.treatment) <- rainbow(3)
+# col.treatment <- as.character(col.treatment)
+# plotMDS(lcpm_gut,
+#         labels = factor(sample.info.gut$Treatment),
+#         col = col.treatment)
+# 
+# 
+# as.factor(col.group_gut)
+```
+
+
+
+```{r}
+sample.info.gut
+```
+
+
+
+```{r}
+fit_gut <- lmFit(lcpm_gut, mm_gut)
+#this is somewhat different from the 
+head(coef(fit_gut))
+
+sample.info.gut
+```
+
+
+```{r}
+contr.matrix2_gut <- makeContrasts(
+   # Within timepoint mtb vs untreated
+   two_hours_WTvsUninfected = two_hours_WT - two_hours_Uninfected,
+   #two_hours_RDvsUninfected = two_hours_RD - two_hours_Uninfected,
+   
+   fourtyeight_hours_WTvsUninfected = fourtyeight_hours_WT - fourtyeight_hours_Uninfected,
+   #fourtyeight_hours_RDvsUninfected = fourtyeight_hours_RD - fourtyeight_hours_Uninfected,
+   
+   WT_48hvs2h = fourtyeight_hours_WT - two_hours_WT,
+   #RD_48hvs2h = fourtyeight_hours_RD - two_hours_RD,
+   
+
+   levels = colnames(mm_gut)
+)
+
+contr.matrix2_gut
+
+```
+
+```{r}
+tmp_gut <- contrasts.fit(fit_gut, contr.matrix2_gut)
+
+
+efit_gut <- eBayes(tmp_gut, trend = TRUE)
+
+
+summary(decideTests(efit_gut))
+
+
+topTreat(efit_gut)
+```
+
+
+
+
+```{r}
+# Function to create data frames with all results using the contrast matrix for naming
+result_dfs <- function(con_mat) {
+   contrast_names <- colnames(con_mat)
+   results_list <- list()
+   for (i in seq(from = 1, to = length(contrast_names))) {
+      name <- print(contrast_names[i], quote = FALSE)
+      
+      top <- topTreat(efit_gut, coef = i, n = Inf)
+      top <- gene.info %>% inner_join(rownames_to_column(top, "Gene_ID"), by ="Gene_ID") 
+      top <- data.frame(top)
+      results_list[[contrast_names[i]]] <- assign(name, top)
+      rownames(results_list[[contrast_names[i]]])<- top$Gene_ID
+   }
+   results_list
+}
+
+results_gut<- result_dfs(contr.matrix2_gut)
+
+
+
+saveRDS(results_gut, file = "results_list_gut.RData")
+
+```
+
+
+

@@ -1,0 +1,155 @@
+---
+title: "Coor_PCA"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, message = FALSE, warning = FALSE)
+
+library(edgeR)
+library(tidyverse)
+library(magrittr)
+library(edgeR)
+library(dplyr)
+library(ggforce)
+library(ggfortify)
+library(viridis)
+library(ggnewscale)
+library(pheatmap)
+library(reshape2)
+
+results <- readRDS("results_list.RData")
+```
+
+
+```{r, echo= TRUE}
+source_rmd = function(file, ...) {
+  tmp_file = tempfile(fileext=".R")
+  on.exit(unlink(tmp_file), add = TRUE)
+  knitr::purl(file, output=tmp_file)
+  source(file = tmp_file, ...)
+}
+```
+
+```{r, echo = TRUE, message=FALSE, results='hide'}
+options(knitr.duplicate.label = "allow")
+source_rmd("rawdata_normalization.rmd")
+```
+
+Correlation analysis heatmap
+
+```{r}
+
+cols2 <- norm_exp_matrix_am_rm[,1:20]
+
+cc2 = cor(cols2, method = "spearman")
+cc_df = as.data.frame(cc2)
+cc_df$samples = row.names(cc_df)
+
+ccm = melt(cc_df, id = "samples")
+
+ccm$samples <- factor(ccm$samples,levels=unique(ccm$samples))
+
+ccm[[1]] %>% gsub("[1-99]", "", .) %>% str_split(., "Untreated")
+
+length(ccm[[1]])
+ccm[[1]]
+
+rep((c(rep(c("iMAC", "MDM"), each = 7), rep(c("AM", "THP1"), each = 3))), times = 20)
+rep(c(rep(c(rep(c("Untreated", "Mtb"), each = 3), "LPS"), times = 2), "Untreated", "Mtb", "LPS",  "Untreated", "Mtb", "LPS"), times = 20)
+
+paste(rep((c(rep(c("iMAC", "MDM"), each = 7), rep(c("AM", "THP1"), each = 3))), times = 20), 
+      rep(c(rep(c(rep(c("Untreated", "Mtb"), each = 3), "LPS"), times = 2), "Untreated", "Mtb", "LPS",  "Untreated", "Mtb", "LPS"), times = 20),
+      sep = "_")
+
+
+
+ggplot(ccm, mapping = aes(x= variable, y = samples))+
+   geom_tile(aes(fill = value)) +
+   scale_fill_gradient(low = "white", high = "darkgreen") +
+    scale_y_discrete(limits = rev(levels(ccm$samples))) +
+    theme(axis.text.x = element_text(angle = 90, size = 14, vjust = -0.002),
+          axis.text.y = element_text(size = 14), 
+          plot.title = element_text(size = 17))+
+  labs(title = "Correlation Analysis Heatmap", x = "", y = "", fill = "Correlation")
+
+
+```
+
+
+
+
+
+
+
+PCA plot
+
+```{r}
+
+norm_pca <- inner_join(as.data.frame(z_transformed_avg_norm_exp_am_rm) %>% rownames_to_column("Gene_ID"), gene.info[c(1,11)])
+
+#norm_pca <- inner_join(avg_norm_exp_as_df_am_rm, gene.info[c(1,11)])
+
+norm_pca[1] <- NULL
+
+
+pca_matrix <-
+   distinct(norm_pca, gene_source, .keep_all = TRUE) %>%
+   column_to_rownames("gene_source") %>%
+   as.matrix() %>%
+   t()
+
+```
+
+```{r}
+# sample_pca <- prcomp(pca_matrix, scale. = TRUE)
+sample_pca <- prcomp(pca_matrix)
+
+
+pc_eigenvalues <- sample_pca$sdev ^ 2
+
+
+pc_eigenvalues <- tibble(PC = factor(1:length(pc_eigenvalues)),
+                         variance = pc_eigenvalues) %>%
+   # add a new column with the percent variance
+   mutate(pct = variance / sum(variance) * 100) %>%
+   # add another column with the cumulative variance explained
+   mutate(pct_cum = cumsum(pct))
+
+
+
+pc_scores <- sample_pca$x
+
+pc_scores <- pc_scores %>%
+   # convert to a tibble retaining the sample names as a new column
+   as_tibble(rownames = "sample")
+
+
+
+```
+
+```{r}
+
+ggplot(
+   pc_scores %>%
+      mutate(
+         "celltype" = rep(sub(
+            "iMACs", "iMAC", unique(sample.info[[2]])
+         ), each = 3),
+         "treatment" = rep(unique(sample.info[[3]]), times =4)
+      ) ,
+   mapping = aes(PC1, PC2, color = celltype, shape = treatment)
+) +
+   geom_point(size = 5) +
+   labs(
+      color = "Celltype",
+      shape = "Treatment",
+      x = "PC1 (29.28%)",
+      y = "PC2 (18.88%)",
+      title = "Principal Component Analysis"
+   ) 
+
+
+```
+
+

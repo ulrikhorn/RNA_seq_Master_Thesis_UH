@@ -1,0 +1,218 @@
+---
+title: "rawdata_normalization"
+output: pdf_document
+---
+
+
+```{r setup, include=TRUE, echo=FALSE}
+knitr::opts_chunk$set(echo = TRUE, warning = FALSE, message = FALSE)
+library(magrittr)
+library(limma)
+library(edgeR)
+library(tidyverse)
+library(purrr)
+library(readr)
+
+```
+
+
+Reading in data
+```{r}
+# Reading in raw data
+rawdata <-
+   read.table(
+      "Data/gene_counts.tsv",
+      header = TRUE,
+      sep = "\t",
+      check.names = FALSE
+   )
+
+
+## Removal of pre activated AMs
+rawdata <-
+ rawdata %>% dplyr::select(-c("16AMUntreated", "17AMUntreated", "19AMMtbAUX", "20AMMtbAUX"))
+
+
+
+rownames(rawdata) <- rawdata[, 1]
+
+# Reading in Gene info
+gene.info <- read_tsv("Data/gene_info.tsv")
+
+#Changing first column to Gene ID for joining
+colnames(gene.info)[1] <- "Gene_ID"
+
+#Reading in Sample info
+sample.info <-
+   read.csv("Data/sample_info.tsv", sep = "\t")
+
+## Removal of pre activated AMs from the metainfo
+sample.info <- sample.info[-c(16, 17, 19, 20), ]
+
+# Add condition colum to sample.info containing group and treatment
+sample.info[, "Condition"] <-
+   factor(paste(sample.info$Sample_Group,
+                sample.info$Treatment, sep = "."))
+
+
+genes <- semi_join(gene.info, rawdata, by = "Gene_ID")
+rawdata <- rawdata %>% dplyr::select(-Gene_ID)
+
+rawdata <- as.matrix(rawdata)
+
+
+```
+
+
+DGE Object
+```{r}
+# Defining group for DGE object
+group <- sample.info$Condition
+
+# Creating dge object which will contain read counts, sample info and gene info
+dge_object2 <- DGEList(rawdata, group = group)
+
+
+#adding treatment to dge$samples
+Treatment <- factor(sample.info$Treatment)
+dge_object2$samples$Treatment <- Treatment
+
+#adding cell type
+Cell_type <- factor(sample.info$Sample_Group)
+dge_object2$samples$Cell_type <- Cell_type
+
+# Removing duplicate gene entries
+genes <- genes[!duplicated(genes$Gene_ID), ]
+# Adding gene info to dge object
+dge_object2$genes <- genes
+
+# For later use
+samplenames <- colnames(rawdata)
+
+
+```
+
+
+```{r}
+# Removing duplicate gene entries
+genes <- genes[!duplicated(genes$Gene_ID),]
+# Adding gene info to dge object
+dge_object2$genes <- genes
+
+```
+
+
+Filtering low counts
+```{r}
+# Creating a model matrix without intercept
+mm <- model.matrix(~0 + group)
+
+# Naming the columns in the model matrix
+colnames(mm) <- gsub("group", "", colnames(mm))
+
+# Finding genes to remove using edgeR flterByExpr()
+keep.exprs <- filterByExpr(dge_object2, mm)
+dge_object2 <- dge_object2[keep.exprs,, keep.lib.sizes=FALSE]
+
+```
+
+
+Calculating normalization factors
+```{r}
+unormalized_dge <- dge_object2
+
+# TMM normalization
+dge_object2 <- calcNormFactors(dge_object2, method = "TMM")
+
+dge_object2$samples
+
+# Counts per million
+tmm <- cpm(dge_object2)
+
+# Log Counts per million
+## This is the normalized counts used for WGCNA analysis
+norm_exp_matrix_am_rm <- cpm(dge_object2, log = TRUE, prior.count = 1)
+
+norm_exp_matrix_am_rm_notlog <- cpm(dge_object2, log = FALSE, prior.count = 1)
+```
+
+Making different versions of the normalized data for use in other scripts
+
+```{r}
+#Making a dataframe of the normalized count matrix for future use
+norm_exp_as_df_am_rm <-
+    norm_exp_matrix_am_rm %>% as.data.frame() %>% rownames_to_column("Gene_ID")
+
+
+norm_exp_as_df_am_rm_notlog <-
+    norm_exp_matrix_am_rm_notlog %>% as.data.frame() %>% rownames_to_column("Gene_ID")
+
+
+avg_norm_exp_as_df_am_rm <- norm_exp_as_df_am_rm %>%
+   mutate(
+      "iMACs.Untreated" = rowMeans(norm_exp_as_df_am_rm[2:4]),
+      "iMACs.MtbAUX" = rowMeans(norm_exp_as_df_am_rm[5:7]),
+      "MDM.Untreated" = rowMeans(norm_exp_as_df_am_rm[9:11]),
+      "MDM.MtbAUX" = rowMeans(norm_exp_as_df_am_rm[12:14])
+   ) %>%
+   dplyr::select(c(-2:-7,-9:-14)) %>%
+   relocate(10:13, .after = 1) %>% relocate(6, .after = 3)
+
+
+colnames(avg_norm_exp_as_df_am_rm) <- c("Gene_ID", as.vector(unique(group)))
+
+
+#notlog
+avg_norm_exp_as_df_am_rm_notlog <- norm_exp_as_df_am_rm_notlog %>%
+   mutate(
+      "iMACs.Untreated" = rowMeans(norm_exp_as_df_am_rm_notlog[2:4]),
+      "iMACs.MtbAUX" = rowMeans(norm_exp_as_df_am_rm_notlog[5:7]),
+      "MDM.Untreated" = rowMeans(norm_exp_as_df_am_rm_notlog[9:11]),
+      "MDM.MtbAUX" = rowMeans(norm_exp_as_df_am_rm_notlog[12:14])
+   ) %>%
+   dplyr::select(c(-2:-7,-9:-14)) %>%
+   relocate(10:13, .after = 1) %>% relocate(6, .after = 3)
+
+
+colnames(avg_norm_exp_as_df_am_rm_notlog) <- c("Gene_ID", as.vector(unique(group)))
+
+
+
+z_transformed_norm_exp_am_rm <-
+    t(scale(
+      t(
+        norm_exp_as_df_am_rm %>% as.tibble() %>% column_to_rownames(var = "Gene_ID") %>% 
+          as.matrix()
+      )
+    ))
+
+
+
+
+  z_transformed_avg_norm_exp_am_rm <-
+    t(scale(
+      t(
+        avg_norm_exp_as_df_am_rm %>% as.tibble() %>%
+          column_to_rownames(var = "Gene_ID") %>%
+          as.matrix()
+      )
+    ))
+
+avg_norm_exp_as_matrix_am_rm <- avg_norm_exp_as_df_am_rm %>% as.tibble() %>%
+          column_to_rownames(var = "Gene_ID") %>%
+          as.matrix()
+    
+## Versiouns of the normalized data that is used in various functions and scripts
+
+# norm_exp_as_df_am_rm
+# norm_exp_matrix_am_rm
+# avg_norm_exp_as_df_am_rm
+# avg_norm_exp_as_matrix_am_rm
+# z_transformed_norm_exp_am_rm
+# z_transformed_avg_norm_exp_am_rm  
+
+```
+
+
+
+

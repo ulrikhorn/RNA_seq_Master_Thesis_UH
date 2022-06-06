@@ -1,0 +1,392 @@
+---
+title: "functions"
+output: pdf_document
+date: '2022-05-30'
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+
+Function to do hierarcical clustering of a list of genes
+
+```{r}
+h_clustering <-
+  function(all_degs = TRUE,
+           gene_list = NULL,
+           no_gene_clusters = 7,
+           no_sample_clusters = 4,
+           remove_thp1 = TRUE,
+           avg = TRUE,
+           title = "title") {
+    if (all_degs == TRUE) {
+      gene_subset <- all_sdegs[1][[1]]
+    }
+    else{
+      gene_subset <- gene_list
+    }
+    if (avg == TRUE) {
+      if (remove_thp1 == TRUE) {
+        expr <- as.data.frame(z_transformed_avg_norm_exp_am_rm)[1:9]
+        cells <- c("iMAC", "AM", "MDM")
+      }
+      else{
+        expr <- as.data.frame(z_transformed_avg_norm_exp_am_rm)
+        cells <- c("iMAC", "AM", "MDM", "THP1")
+      }
+    }
+    else{
+      if (remove_thp1 == TRUE) {
+        expr <- as.data.frame(z_transformed_norm_exp_am_rm)[1:17]
+        cells <- c("iMAC", "AM", "MDM")
+      }
+      else{
+        expr <- as.data.frame(z_transformed_norm_exp_am_rm)
+        cells <- c("iMAC", "AM", "MDM", "THP1")
+      }
+    }
+    
+    hclust_matrix <-
+      inner_join(expr %>% rownames_to_column("Gene_ID"),
+                 gene.info[c(1, 11)]) %>%
+      distinct(gene_source, .keep_all = TRUE) %>%
+      dplyr::select(-1) %>% filter(gene_source %in% unique(gene_subset)) %>%
+      column_to_rownames("gene_source") %>%
+      as.matrix()
+    
+    hclust_matrix2 <- hclust_matrix %>% t()
+    
+    gene_dist <-
+      dist(hclust_matrix, method = "euclidean") #euclidian
+    
+    
+    gene_hclust <- hclust(gene_dist, method = "complete")
+    
+    
+    sample_dist <- dist(hclust_matrix2)
+    sample_hclust <- hclust(sample_dist, method = "complete")
+    
+    
+    gene_cluster <- cutree(gene_hclust, k = no_gene_clusters)
+    
+    # Make dataframe of the genes and their respective clusters for enrichment analysis
+    gene_cluster_df <- gene_cluster %>% enframe()
+    names(gene_cluster_df) <- c("gene_source", "cluster")
+    sample_cluster <- cutree(sample_hclust, k = no_sample_clusters)
+    dd <- dendro_data(sample_hclust, type = "rectangle")
+    dd$labels <-
+      dd$labels %>% mutate("celltype" = gsub(x = dd$labels$label, "\\..*", ""))
+    
+    p <- ggplot(segment(dd)) +
+      geom_segment(aes(
+        x = x,
+        y = y,
+        xend = xend,
+        yend = yend
+      )) +
+      geom_text(
+        data = label(dd),
+        aes(
+          label = label,
+          x = x,
+          y = 0,
+          color = celltype
+        ),
+        angle = 90,
+        hjust = 1.1,
+        size = 5
+      ) +
+      theme(
+        panel.background = element_blank(),
+        axis.line.y.left = element_line(),
+        plot.title = element_text(size = 15),
+        axis.text.y = element_text(size = 10),
+        axis.title.y = element_text(size = 14),
+        axis.text.x = element_blank(),
+        axis.ticks.x = element_blank(),
+        axis.title.x = element_blank(),
+        legend.position = "none"
+      ) +
+      coord_cartesian(clip = "off") +
+      theme(plot.margin = margin(0.5, 0.5, 3.9, 0.5, "cm")) +
+      labs(y = "Height", title = title)
+    
+    print(p)
+    
+    Heatmap(
+      hclust_matrix,
+      show_row_names = TRUE,
+      split = gene_cluster,
+      column_split = factor(sample_cluster, levels = c(1, 3, 2, 4)),
+      name = "Z-score",
+      column_title = title
+    )
+    
+    
+  }
+
+```
+
+
+
+```{r}
+heatmap_function <-
+  function(genes,
+           title_arg,
+           z_score = TRUE,
+           w_diff = TRUE, 
+           width = 0.89,
+           height = 0.9) {
+    
+    # If the input genes is a vector of genes make a df
+    if (typeof(genes) == "character") {
+      gene_df <-
+        data.frame("gene_source" = genes, "original_names" = genes)
+      gene_list <- genes
+    } else{
+      gene_df <- genes
+      gene_list <- genes[[1]]
+    }
+    
+    
+    Treatment_vector <-
+      c(rep(c("Untreated", "MtbAUX", "LPS"), times = 3),
+        rep(c("Untreated", "LPS", "MtbAUX")))
+    celltype_vector <- rep(c("iMAC", "MDM", "AM", "THP1"), each = 3)
+    
+    
+    # using the df of z-transformed counts
+    if (z_score == TRUE) {
+      df <-
+        inner_join(
+          data.frame(z_transformed_avg_norm_exp_am_rm) %>% rownames_to_column("Gene_ID"),
+          gene.info[c(1, 11)],
+          by = "Gene_ID"
+        ) %>% filter(gene_source %in% gene_list) %>%
+        inner_join(gene_df, by = "gene_source") %>% relocate(14) %>%
+        dplyr::select(-2) %>% pivot_longer(2:13, "Sample_ID") %>%
+        mutate("Treatment" = rep(Treatment_vector, times = nrow(
+          inner_join(avg_norm_exp_as_df_am_rm, gene.info[c(1, 11)], by = "Gene_ID") %>%
+            filter(gene_source %in% gene_list)
+        ))) %>%
+        mutate("Celltype" = rep(celltype_vector, times = nrow(
+          inner_join(avg_norm_exp_as_df_am_rm, gene.info[c(1, 11)], by = "Gene_ID") %>%
+            filter(gene_source %in% gene_list)
+        )))
+      
+      # Changing the colors to suit z-score heatmap plotting
+      fill_name <- "Z-score"
+      fill_color <- scale_fill_gradient2(
+        low = "blue",
+        mid = "white",
+        high = "red",
+        name = fill_name
+      )
+      
+    } else{
+      df <-
+        inner_join(avg_norm_exp_as_df_am_rm, gene.info[c(1, 11)], by = "Gene_ID") %>% filter(gene_source %in% gene_list) %>%
+        inner_join(gene_df, by = "gene_source") %>% relocate(14) %>%
+        dplyr::select(-2) %>% pivot_longer(2:13, "Sample_ID") %>%
+        mutate("Treatment" = rep(Treatment_vector, times = nrow(
+          inner_join(avg_norm_exp_as_df_am_rm, gene.info[c(1, 11)], by = "Gene_ID") %>%
+            filter(gene_source %in% gene_list)
+        ))) %>%
+        mutate("Celltype" = rep(celltype_vector, times = nrow(
+          inner_join(avg_norm_exp_as_df_am_rm, gene.info[c(1, 11)], by = "Gene_ID") %>%
+            filter(gene_source %in% gene_list)
+        )))
+      
+      fill_name <- "log2(CPM)"
+      fill_color <- scale_fill_gradient(low = "lightblue",
+                             high = "darkblue",
+                             name = fill_name)
+    }
+    
+    
+    if (w_diff == TRUE) {
+      new_df <- data.frame()
+      
+      for (i in 1:4) {
+        deg_df <- results[i][[1]] %>% dplyr::select(11, 12, 13, 16)
+        deg_df$diffexpressed <- "NO"
+        
+        deg_df$diffexpressed[deg_df$logFC > 1 &
+                               deg_df$P.Value < 0.05] <- "YES"
+        # if log2Foldchange < -0.6 and pvalue < 0.05, set as "DOWN"
+        deg_df$diffexpressed[deg_df$logFC < -1 &
+                               deg_df$P.Value < 0.05] <- "YES"
+        
+        
+        new_df <-
+          bind_rows(new_df, inner_join(
+            dplyr::select(deg_df, 1, 5),
+            filter(df, Celltype == sort(unique(df$Celltype))[i])
+          ))
+      }
+    }
+    
+    x_level <- as.factor(c(unique(df$Sample_ID)[1:10], "THP1.MtbAUX", "THP1.LPS"))
+    y_level <- as.factor(gene_df$original_names)
+    
+    x_ticks <- rep(c("Untreated", "MtbAUX", "LPS"), times = 4)
+    
+    if (ncol(gene_df) == 3) {
+      facet <- group ~ Celltype
+      
+    } else{
+      facet <- ~ Celltype
+    }
+    
+  
+    if (w_diff == TRUE) {
+      p <-
+        ggplot(data = new_df, aes(
+          x = factor(Sample_ID, levels = x_level),
+          y = factor(original_names, levels = rev(y_level)),
+          fill = value
+        )) +
+        geom_tile(aes(color = diffexpressed, width=width, height=height)) +
+        fill_color +
+        ggtitle("test table") +
+        facet_grid(facet, scales = "free", space = "free") +
+        theme(axis.text.x = element_text(
+          angle = 90,
+          vjust = 0.5,
+          hjust = 1,
+          size = 11
+        )) +
+        theme(axis.text.y = element_text(size = 11)) +
+        #scale_y_discrete(guide = guide_axis(n.dodge=3))
+        scale_x_discrete(labels = x_ticks) +
+        labs(x = "", y = "", title = title_arg) +
+        scale_color_manual(values = c("gray", "red"))+
+        guides(color = guide_legend("SDEG \n (Mtb vs \n Untreated)"))
+    } else{
+      p <-
+        ggplot(data = df, aes(
+          x = factor(Sample_ID, levels = x_level),
+          y = factor(original_names, levels = rev(y_level)),
+          fill = value
+        )) +
+        geom_tile() +
+        fill_color +
+        ggtitle("test table") +
+        facet_grid(facet, scales = "free", space = "free") +
+        theme(axis.text.x = element_text(
+          angle = 90,
+          vjust = 0.5,
+          hjust = 1
+        )) +
+        theme(axis.text.y = element_text(size = 7)) +
+        #scale_y_discrete(guide = guide_axis(n.dodge=3))
+        scale_x_discrete(labels = x_ticks) +
+        labs(x = "", y = "", title = title_arg)
+    }
+    
+    print(p)
+    
+  }
+
+```
+
+Significant differnetially expressed protein coding genes extraction function
+
+```{r}
+sdeg_extraction <- function(results_df){
+  
+  results_df %>% dplyr::select(11, 12, 13, 16, 17) %>% filter(logFC > 1 |
+                                                                            logFC < -1) %>% filter(P.Value < 0.05) %>%
+  filter(
+    gene_biotype == "ensembl_havana\tprotein_coding" |
+      gene_biotype == "havana\tprotein_coding"
+  )
+}
+
+```
+
+
+Search genes function returning dataframes for each cell type containing the expression and Log2FC values for query genes
+
+```{r}
+search_genes <- function(query) {
+  base_df <-
+    avg_norm_exp_as_df_am_rm %>% inner_join(gene.info[c(1, 11)]) %>% relocate(14)
+  
+  iMAC_df <-
+    base_df[c(1, 3:5)] %>% inner_join(results$iMACs.MtbAUXvsiMACs.Untreated[c(11, 13, 16)]) %>% inner_join(results$iMACs.LPSvsiMACs.Untreated[c(11, 13, 16)], by = "gene_source")
+  colnames(iMAC_df)[5:8] <-
+    c(
+      "MtbvsUtreated_logFC",
+      "MtbvsUntreated_P.value",
+      "LPSvsUntreated_logFC",
+      "LPSvsUntreated_P.value"
+    )
+  
+  AM_df <-
+    base_df[c(1, 9:11)] %>% inner_join(results$AM.MtbAUXvsAM.Untreated[c(11, 13, 16)]) %>% inner_join(results$AM.LPSvsAM.Untreated[c(11, 13, 16)], by = "gene_source")
+  colnames(AM_df)[5:8] <-
+    c(
+      "MtbvsUtreated_logFC",
+      "MtbvsUntreated_P.value",
+      "LPSvsUntreated_logFC",
+      "LPSvsUntreated_P.value"
+    )
+  
+  MDM_df <-
+    base_df[c(1, 6:8)] %>% inner_join(results$MDM.MtbAUXvsMDM.Untreated[c(11, 13, 16)]) %>% inner_join(results$MDM.LPSvsMDM.Untreated[c(11, 13, 16)], by = "gene_source")
+  colnames(MDM_df)[5:8] <-
+    c(
+      "MtbvsUtreated_logFC",
+      "MtbvsUntreated_P.value",
+      "LPSvsUntreated_logFC",
+      "LPSvsUntreated_P.value"
+    )
+  
+  THP1_df <-
+    base_df[c(1, 12:14)] %>% inner_join(results$THP1.MtbAUXvsTHP1.Untreated[c(11, 13, 16)]) %>% inner_join(results$THP1.LPSvsTHP1.Untreated[c(11, 13, 16)], by = "gene_source")
+  colnames(THP1_df)[5:8] <-
+    c(
+      "MtbvsUtreated_logFC",
+      "MtbvsUntreated_P.value",
+      "LPSvsUntreated_logFC",
+      "LPSvsUntreated_P.value"
+    )
+  
+  df_list <- list(iMAC_df, AM_df, MDM_df, THP1_df)
+  
+  
+  
+  for (df in 1:4) {
+    print(df_list[[df]] %>% filter(gene_source %in% query))
+    
+  }
+  
+}
+```
+
+
+```{r}
+extract_genes_in_term <- function(enrichment_df) {
+  no_terms <- 10
+  
+  enriched_pathway_genes <- data.frame("term" = NULL, "genes" = NULL)
+  
+  for (term in 1:no_terms) {
+    str <- str_split(enrichment_df$geneID[term], "/")
+    enriched_pathway_genes <-
+      rbind(
+        data.frame("term" = enrichment_df$Description[term], "genes" = str[[1]]),
+        enriched_pathway_genes
+      )
+    
+  }
+  names(enriched_pathway_genes) <- c("terms", "gene_source")
+  enriched_pathway_genes
+}
+```
+
+
+

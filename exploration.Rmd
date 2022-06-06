@@ -1,0 +1,673 @@
+---
+title: "Exploration"
+output: html_document
+---
+
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+library(ggVennDiagram)
+
+#library(mygene)
+library(tidyverse)
+library(dplyr)
+library(magrittr)
+library(KEGGREST)
+
+results <- read_rds("results_list.rdata")
+results_gut <- read_rds("results_list_gut.rdata")
+```
+
+
+```{r}
+source_rmd = function(file, ...) {
+  tmp_file = tempfile(fileext=".R")
+  on.exit(unlink(tmp_file), add = TRUE)
+  knitr::purl(file, output=tmp_file)
+  source(file = tmp_file, ...)
+}
+```
+
+```{r}
+options(knitr.duplicate.label = "allow")
+source_rmd("rawdata_normalization.rmd")
+source_rmd("functions.rmd")
+
+```
+
+
+```{r}
+
+sdeg_imac <-
+  sdeg_extraction(results$iMACs.MtbAUXvsiMACs.Untreated)
+
+sdeg_mdm <-
+  sdeg_extraction(results$MDM.MtbAUXvsMDM.Untreated)
+
+sdeg_am <-
+  sdeg_extraction(results$AM.MtbAUXvsAM.Untreated)
+
+sdeg_thp1 <-
+  sdeg_extraction(results$THP1.MtbAUXvsTHP1.Untreated)
+
+```
+
+
+
+```{r}
+ base_df <-
+    avg_norm_exp_as_df_am_rm %>% inner_join(gene.info[c(1, 11)]) %>% relocate(14)
+  
+  iMAC_df <-
+    base_df[c(1, 3:5)] %>% inner_join(results$iMACs.MtbAUXvsiMACs.Untreated[c(11, 13, 16)]) %>% inner_join(results$iMACs.LPSvsiMACs.Untreated[c(11, 13, 16)], by = "gene_source")
+  colnames(iMAC_df)[5:8] <-
+    c(
+      "MtbvsUtreated_logFC",
+      "MtbvsUntreated_P.value",
+      "LPSvsUntreated_logFC",
+      "LPSvsUntreated_P.value"
+    )
+  
+  AM_df <-
+    base_df[c(1, 9:11)] %>% inner_join(results$AM.MtbAUXvsAM.Untreated[c(11, 13, 16)]) %>% inner_join(results$AM.LPSvsAM.Untreated[c(11, 13, 16)], by = "gene_source")
+  colnames(AM_df)[5:8] <-
+    c(
+      "MtbvsUtreated_logFC",
+      "MtbvsUntreated_P.value",
+      "LPSvsUntreated_logFC",
+      "LPSvsUntreated_P.value"
+    )
+  
+  MDM_df <-
+    base_df[c(1, 6:8)] %>% inner_join(results$MDM.MtbAUXvsMDM.Untreated[c(11, 13, 16)]) %>% inner_join(results$MDM.LPSvsMDM.Untreated[c(11, 13, 16)], by = "gene_source")
+  colnames(MDM_df)[5:8] <-
+    c(
+      "MtbvsUtreated_logFC",
+      "MtbvsUntreated_P.value",
+      "LPSvsUntreated_logFC",
+      "LPSvsUntreated_P.value"
+    )
+  
+  THP1_df <-
+    base_df[c(1, 12:14)] %>% inner_join(results$THP1.MtbAUXvsTHP1.Untreated[c(11, 13, 16)]) %>% inner_join(results$THP1.LPSvsTHP1.Untreated[c(11, 13, 16)], by = "gene_source")
+  colnames(THP1_df)[5:8] <-
+    c(
+      "MtbvsUtreated_logFC",
+      "MtbvsUntreated_P.value",
+      "LPSvsUntreated_logFC",
+      "LPSvsUntreated_P.value"
+    )
+```
+
+
+
+Cell surface receptors
+
+```{r}
+receptors <- c("CR1", "ITGAM", "TLR2", "TLR9", "TLR4", "MRC1")
+
+# search_genes(receptors)
+
+heatmap_function(
+  genes = receptors,
+  title_arg = "a) Cell Surface Pattern Recognition Receptors",
+  z_score = TRUE,
+  w_diff = TRUE,
+  width = 0.94,
+  height = 0.96
+)
+h_clustering(
+  all_degs = FALSE,
+  gene_list = receptors,
+  no_gene_clusters = 1,
+  no_sample_clusters = 1,
+  remove_thp1 = FALSE,
+  avg = TRUE,
+  title = "b) Cell Surface Pattern Recognition Receptors"
+)
+```
+
+
+
+
+pro inflammatory mediators
+
+
+```{r}
+pro <-
+  c("IL12B",
+    "IL23A",
+    "IL1A",
+    "IL1B",
+    "IL6",
+    "CXCL10",
+    "IL-27A",
+    "TNF",
+    "CSF2",
+    "NFKB1")
+
+heatmap_function(
+  genes = pro,
+  title_arg = "a) Pro-inflammatory mediators",
+  z_score = TRUE,
+  w_diff = TRUE,
+  width = 0.93
+)
+
+h_clustering(
+  all_degs = FALSE,
+  gene_list = pro,
+  no_gene_clusters = 1,
+  no_sample_clusters = 1,
+  remove_thp1 = FALSE,
+  avg = TRUE,
+  title = "b) Pro-inflammatory mediators"
+)
+
+```
+
+
+Anti-inflammatory mediators
+
+```{r}
+anti <-
+  c("TGFB1",
+    "IL10",
+    "PPARG",
+    "SOCS1",
+    "SOCS2",
+    "IRAK3",
+    "NR1H3",
+    "NR1H2")
+
+
+heatmap_function(
+  genes = anti,
+  title_arg = "a) Anti-inflammatory mediators",
+  z_score = TRUE,
+  w_diff = TRUE,
+  width = 0.93
+)
+
+h_clustering(
+  all_degs = FALSE,
+  gene_list = anti,
+  no_gene_clusters = 1 ,
+  no_sample_clusters = 1,
+  remove_thp1 = FALSE,
+  avg = TRUE,
+  title = "b) Anti-inflammatory mediators"
+)
+
+
+```
+
+Typ1 1 ifn genes used
+
+```{r}
+t1IFN <-
+  c(
+    "JAK1",
+    "TYK2",
+    "STAT1",
+    "STAT2",
+    "IRF9",
+    "OAS1",
+    "OASL",
+    "OAS2",
+    "OAS3",
+    "ISG20",
+    "ZC3HAV1",
+    "SHFL",
+    "RBBP6",
+    "IFNB1",
+    "IFNA1"
+  )
+
+heatmap_function(
+  t1IFN,
+  "a) Type 1 response genes",
+  z_score = TRUE,
+  w_diff = TRUE,
+  height = 0.88,
+  width = 0.94
+)
+
+h_clustering(
+  all_degs = FALSE,
+  gene_list = t1IFN,
+  no_gene_clusters = 1 ,
+  no_sample_clusters = 1,
+  remove_thp1 = FALSE,
+  avg = TRUE,
+  title = "b) Type 1 response genes"
+)
+
+```
+
+
+
+```{r}
+mhc2 <-
+  c(
+    "HLA-DPA1",
+    "HLA-DPB1",
+    "HLA-DMB",
+    "HLA-DOA",
+    "HLA-DOB",
+    "HLA-DQA1",
+    "HLA-DQB1",
+    "HLA-DRA",
+    "HLA-DRB1",
+    "HLA-DRB3",
+    "HLA-DRB4",
+    "HLA-DRB5",
+    "HLA-DMA",
+    "HLA-DQA2",
+    "HLA-DQA1",
+    "CIITA"
+  )
+length(mhc2)
+
+iMAC_df %>% dplyr::select(-c(2:4, 6:7)) %>% add_column("cell" = rep("iMAC", times = nrow(iMAC_df)))
+AM_df %>% dplyr::select(-c(2:4, 6:7)) %>% add_column("cell" = rep("AM", times = nrow(AM_df)))
+MDM_df %>% dplyr::select(-c(2:4, 6:7)) %>% add_column("cell" = rep("MDM", times = nrow(MDM_df)))
+THP1_df %>% dplyr::select(-c(2:4, 6:7)) %>% add_column("cell" = rep("THP1", times = nrow(THP1_df)))
+
+
+logfc_df <-
+  bind_rows(
+    iMAC_df %>% dplyr::select(-c(2:4, 6:7)) %>% add_column("cell" = rep("iMAC", times = nrow(iMAC_df))),
+    AM_df %>% dplyr::select(-c(2:4, 6:7)) %>% add_column("cell" =
+                                                           rep("AM", times = nrow(AM_df))),
+    MDM_df %>% dplyr::select(-c(2:4, 6:7)) %>% add_column("cell" =
+                                                            rep("MDM", times = nrow(MDM_df))),
+    THP1_df %>% dplyr::select(-c(2:4, 6:7)) %>% add_column("cell" =
+                                                             rep("THP1", times = nrow(THP1_df)))
+  )
+
+logfc_df_mhc2 <-
+  logfc_df %>% dplyr::select(1, 2, 4) %>% filter(gene_source %in% mhc2)
+
+
+ggplot(logfc_df_mhc2,
+       mapping = aes(y = MtbvsUtreated_logFC, x = cell, color = cell)) +
+  geom_boxplot() +
+  #geom_hline(yintercept = 0)+
+  theme_bw() +
+  guides(color = FALSE) +
+  labs(x = "", y = "MtbAUX vs Untreated Log2 Fold Change", title = "MtbAUX vs Untreated Log2 Fold Change in MHC class 2 Molecule Expression") +
+  theme(
+    axis.text.x = element_text(size = 14),
+    axis.text.y = element_text(size = 11),
+    axis.title.y = element_text(size = 14),
+    plot.title = element_text(size = 15)
+  )
+
+```
+
+
+apoptosis inhibitors
+
+```{r}
+search_genes(
+  c(
+    "BCL2",
+    "BCL2L2",
+    "BCL2A1",
+    "RB1",
+    "XIAP",
+    "BCL2L1",
+    "BIRC1",
+    "BIRC2",
+    "BIRC3",
+    "BIRC5",
+    "BIRC7",
+    "CFLAR",
+    "MCL1"
+  )
+)
+
+heatmap_function(
+  genes = c(
+    "BCL2",
+    "BCL2L2",
+    "BCL2A1",
+    "RB1",
+    "XIAP",
+    "BCL2L1",
+    "BIRC1",
+    "BIRC2",
+    "BIRC3",
+    "BIRC5",
+    "BIRC7",
+    "CFLAR",
+    "MCL1"
+  ),
+  title_arg = "a) Apoptosis inhibitors",
+  z_score = TRUE,
+  w_diff = TRUE
+)
+h_clustering(
+  all_degs = F,
+  gene_list = c(
+    "BCL2",
+    "BCL2L2",
+    "BCL2A1",
+    "RB1",
+    "XIAP",
+    "BCL2L1",
+    "BIRC1",
+    "BIRC2",
+    "BIRC3",
+    "BIRC5",
+    "BIRC7",
+    "CFLAR",
+    "MCL1"
+  ),
+  no_gene_clusters = 1,
+  no_sample_clusters = 1,
+  remove_thp1 = FALSE,
+  avg = TRUE,
+  title = "b) Apoptosis inhibitors"
+)
+
+```
+
+
+
+
+Necroptosis related genes
+
+```{r}
+necroptosis_genes <-
+  str_split(
+    c(
+      "TNF,TNFRSF1A,TRADD,FADD,RIPK1,RIPK3,CASP8,TRAF1,CAAP1,CYLD,MLKL,PGAM5,DNM1L,IFNAR1,TNFSF10,PARP1"
+    ),
+    ","
+  )[[1]]
+
+
+heatmap_function(
+  genes = necroptosis_genes,
+  title_arg = "a) Necroptosis related genes",
+  z_score = TRUE,
+  w_diff = TRUE,
+  height = 0.89,
+  width = 0.93
+)
+
+h_clustering(
+  all_degs = FALSE,
+  gene_list = necroptosis_genes,
+  no_gene_clusters = 1 ,
+  no_sample_clusters = 1,
+  remove_thp1 = FALSE,
+  avg = TRUE,
+  title = "b) Necroptosis related genes"
+)
+
+
+
+search_genes(necroptosis_genes)
+```
+
+
+ferroptosis related genes
+
+```{r}
+ferroptosis <- read.csv("Data/ferroptosis.csv")
+
+heatmap_function(
+  ferroptosis[[1]],
+  "Ferroptosis",
+  z_score = TRUE,
+  w_diff = TRUE,
+  width = 0.95
+)
+
+
+
+h_clustering(
+  all_degs = FALSE,
+  gene_list = ferroptosis[[1]],
+  no_gene_clusters = 1 ,
+  no_sample_clusters = 1,
+  remove_thp1 = FALSE,
+  avg = TRUE,
+  title = "Ferroptosis"
+)
+
+```
+
+Pyroptosis related genes
+
+```{r}
+
+pryoptosis <-
+  c("GSDMD", "CASP1", "TAK1", "AIM2",  "NLRP3", "PYCARD", "IL1B")
+
+
+heatmap_function(
+  unique(pryoptosis),
+  z_score = TRUE,
+  w_diff = TRUE,
+  "a) Pyroptosis related genes"
+)
+
+
+h_clustering(
+  all_degs = FALSE,
+  gene_list = pryoptosis,
+  no_gene_clusters = 1 ,
+  no_sample_clusters = 1,
+  remove_thp1 = FALSE,
+  avg = TRUE,
+  title = "b) Pyroptosis related genes"
+)
+
+
+```
+
+
+
+```{r, eval=FALSE}
+getkegg_function <- function(pathway) {
+  library(KEGGREST)
+  pathway_genes <- keggGet(pathway)[[1]]$GENE
+  nameseven <-  pathway_genes[seq(0, length(pathway_genes), 2)]
+  pathway_genes <- gsub(";.*", "", nameseven)
+  #pathway_df <- data.frame("gene_source" = pathway_genes, "original_names" = pathway_genes)
+  pathway_genes
+  #pathway_df
+  #pathway_df <- pathway_df %>% filter(gene_source %in% all_sdegs$gene_source)
+  
+}
+
+
+h_clustering(
+  all_degs = FALSE,
+  gene_list = getkegg_function(Necroptosis_pathway)[[1]],
+  no_gene_clusters = 1,
+  no_sample_clusters = 4,
+  remove_thp1 = FALSE,
+  avg = TRUE
+)
+h_clustering(
+  all_degs = FALSE,
+  gene_list = getkegg_function(Ferroptosis_pathway)[[1]],
+  no_gene_clusters = 1,
+  no_sample_clusters = 4,
+  remove_thp1 = FALSE,
+  avg = TRUE
+)
+h_clustering(
+  all_degs = FALSE,
+  gene_list = getkegg_function(Apoptosis_pathway)[[1]],
+  no_gene_clusters = 1,
+  no_sample_clusters = 4,
+  remove_thp1 = FALSE,
+  avg = TRUE
+)
+h_clustering(
+  all_degs = FALSE,
+  gene_list = getkegg_function(Tuberculosis_pathway)[[1]],
+  no_gene_clusters = 1,
+  no_sample_clusters = 4,
+  remove_thp1 = FALSE,
+  avg = TRUE
+)
+
+getkegg_function(Necroptosis_pathway)
+
+
+
+library(KEGGREST)
+
+
+
+NFKB_pathway_genes <- keggGet(NFKB_pathway)[[1]]$GENE
+nameseven <-
+  NFKB_pathway_genes[seq(0, length(NFKB_pathway_genes), 2)]
+NFKB_pathway_genes <- gsub(";.*", "", nameseven)
+NFKB_df <-
+  data.frame("gene_source" = NFKB_pathway_genes, "original_names" = NFKB_pathway_genes)
+
+NFKB_df <-
+  NFKB_df %>% filter(gene_source %in% all_sdegs$gene_source)
+
+
+heatmap_improved(NFKB_df[[1]], NFKB_df, "NFkB")
+
+
+```
+
+
+
+iMAC gut comparison 
+
+
+```{r}
+
+df <-
+  inner_join(
+    norm_exp_matrix_am_rm %>% as.data.frame() %>% rownames_to_column("Gene_ID") %>% .[1:8],
+    gene.info[c(1, 11)],
+    by = "Gene_ID"
+  ) %>%
+  #filter(gene_source %in% gene_list) %>%
+  #inner_join(gene_df, by = "gene_source") %>%
+  relocate(9) %>%
+  dplyr::select(-2) %>%
+  pivot_longer(2:8, "Sample_ID") %>%
+  mutate("Treatment" = rep(Treatment_vector, times = nrow(
+    inner_join(
+      norm_exp_matrix_am_rm %>% as.data.frame() %>% rownames_to_column("Gene_ID") %>% .[1:8],
+      gene.info[c(1, 11)],
+      by = "Gene_ID"
+    )
+  ))) %>%
+  mutate("Celltype" = rep(celltype_vector, times = nrow(
+    inner_join(
+      norm_exp_matrix_am_rm %>% as.data.frame() %>% rownames_to_column("Gene_ID") %>% .[1:8],
+      gene.info[c(1, 11)],
+      by = "Gene_ID"
+    )
+  )))
+
+gut <-
+  norm_exp_matrix_gut %>% as.data.frame() %>% rownames_to_column("Gene_ID") %>% inner_join(gene.info[c(1, 11)]) %>% relocate(20) %>% dplyr::select(-c(5, 8, 11, 14, 17, 20))
+
+gut <-
+  gut %>% mutate(
+    "mean_2h_untreated" = rowMeans(select(gut, contains("2h_Uninfected"))),
+    "mean_2h_Mtb" = rowMeans(select(gut, contains("2h_WT"))),
+    "mean_48h_untreated" = rowMeans(select(gut, contains("48h_Uninfected"))),
+    "mean_48h_Mtb" = rowMeans(select(gut, contains("48h_WT")))
+  ) %>% select(c(1, contains("mean"))) %>% pivot_longer(2:5, "Sample_ID")
+
+gut <-
+  gut %>% mutate(
+    "treatment" = gsub(x = .$Sample_ID, ".*_*_", ""),
+    "time" = rep(c("2h", "48h"), each = 2, times = nrow(gut) / 4)
+  )
+
+
+
+iMAC_new <-
+  iMAC_df %>% pivot_longer(2:4, "Sample_ID") %>% dplyr::select(c(1, 5, 6)) %>% mutate("treatment" = gsub(x =
+                                                                                                           .$Sample_ID, ".*\\.", "")) %>% filter(treatment != "LPS") %>% add_column("time" = rep("20h", times = nrow(.)))
+
+iMAC_new$treatment = gsub(x = gsub(x = iMAC_new$treatment, "U", "u") , "MtbAuX", "Mtb")
+
+
+
+ggplot(
+  all_imacs %>% filter(gene_source %in% c("IFNB1", "IL10", "IL23A", "IDO1")),
+  mapping = aes(
+    factor(time, levels = c("2h", "20h", "48h")),
+    value,
+    color = treatment,
+    group = treatment
+  )
+) +
+  geom_line(size = 1.5) +
+  geom_point(size = 1.5) +
+  facet_grid( ~ gene_source) +
+  labs(y = "Log2(CPM)", x = "", title = "iMAC mRNA expression over time")
+
+
+ggplot(
+  all_imacs %>% filter(
+    gene_source %in% c(
+      "HLA-DPA1",
+      "HLA-DPB1",
+      "HLA-DMB",
+      "HLA-DOA",
+      "HLA-DOB",
+      "HLA-DQA1",
+      "HLA-DQB1",
+      "HLA-DRA",
+      "HLA-DRB1",
+      "HLA-DRB3",
+      "HLA-DRB4",
+      "HLA-DRB5",
+      "HLA-DMA",
+      "HLA-DQA2",
+      "HLA-DQA1",
+      "CIITA"
+    )
+  ),
+  mapping = aes(
+    factor(time, levels = c("2h", "20h", "48h")),
+    value,
+    color = gene_source,
+    group = treatment
+  )
+) +
+  geom_line(size = 1.5) +
+  geom_point(size = 1.5) +
+  #geom_boxplot()+
+  #facet_grid(~time) +
+  labs(y = "Log2(CPM)", x = "", title = "iMAC mRNA expression over time")
+
+
+
+x1 <-
+  list(iMAC_2h = sdeg_extraction(results_gut$two_hours_WTvsUninfected)[[1]],
+        iMAC_20h = sdeg_imac[[1]],
+       iMAC_48h = sdeg_extraction(results_gut$fourtyeight_hours_WTvsUninfected)[[1]])
+
+
+ggVennDiagram(x1, label = "count") +
+  scale_fill_gradient(low = "#F4FAFE", high = "#4981BF")+
+  labs(title = "Mtb vs Untreated iMAC SDEGs")+
+  guides(fill = FALSE)
+
+```
+
+
+
+

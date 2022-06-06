@@ -1,0 +1,87 @@
+---
+title: "venn"
+output: html_document
+date: '2022-05-29'
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+sdeg_extraction <- function(results_df){
+  
+  results_df %>% dplyr::select(11, 12, 13, 16, 17) %>% filter(logFC > 1 |
+                                                                            logFC < -1) %>% filter(P.Value < 0.05) %>%
+  filter(
+    gene_biotype == "ensembl_havana\tprotein_coding" |
+      gene_biotype == "havana\tprotein_coding"
+  )
+}
+
+
+
+
+sdeg_imac <-
+  sdeg_extraction(results$iMACs.MtbAUXvsiMACs.Untreated)
+
+sdeg_mdm <-
+  sdeg_extraction(results$MDM.MtbAUXvsMDM.Untreated)
+
+sdeg_am <-
+  sdeg_extraction(results2$AM.MtbAUXvsAM.Untreated)
+
+# sdeg_all_am <-
+#   sdeg_extraction(all_ams_results$AM.MtbAUXvsAM.Untreated)
+
+sdeg_thp1 <-
+  sdeg_extraction(results$THP1.MtbAUXvsTHP1.Untreated)
+
+
+
+
+  )
+
+x2 <-
+  list(iMAC = sdeg_imac[[1]],
+       MDM = sdeg_mdm[[1]],
+       AM = sdeg_am[[1]],
+       THP1 = sdeg_thp1[[1]])
+
+
+
+
+
+
+
+ggVennDiagram(x2, label = "count") +
+  scale_fill_gradient(low = "#F4FAFE", high = "#4981BF")+
+  labs(title = "MtbAUX vs Untreated Significantly differentially expressed genes")+
+  guides(fill = FALSE)
+
+```
+
+
+```{r}
+x1 <-
+  list(iMAC_2h = sdeg_extraction(results_gut$two_hours_WTvsUninfected)[[1]],
+        iMAC_20h = sdeg_imac[[1]],
+       iMAC_48h = sdeg_extraction(results_gut$fourtyeight_hours_WTvsUninfected)[[1]])
+
+
+ggVennDiagram(x1, label = "count") +
+  scale_fill_gradient(low = "#F4FAFE", high = "#4981BF")+
+  labs(title = "Mtb vs Untreated iMAC SDEGs")+
+  guides(fill = FALSE)
+
+  
+  
+  
+    coord_cartesian(clip = "off")
+
+
+  theme(plot.margin = margin(0.5, 0.5, 3.9, 0.5, "cm"))
+```
+
+
+
